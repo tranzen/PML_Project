@@ -1,0 +1,82 @@
+---
+title: "PML Project Write-up"
+output: html_document
+---
+The goal of this project is to predict wether a person performs dumb-bell lifts correctly (output class A) or incorrectly (output classes B -throwing the elbows to the front-, C -lifting the dumbbell only halfway-, D -lowering the dumbbell only halfway- and E -throwing the hips to the front-). 
+
+The first thing to do is to retrieve the training and testing data from the specified locations.
+````{r, echo=TRUE, results='hide'}
+if (!file.exists("./data/training.csv")){
+        fileUrlTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        fileUrlTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        if(!file.exists("./data")){dir.create("./data")}
+        download.file(fileUrlTrain, destfile="./data/training.csv", method="curl")  
+        download.file(fileUrlTest, destfile="./data/testing.csv", method="curl") 
+}
+training <- read.csv("./data/training.csv")
+testing <- read.csv("./data/testing.csv")
+```
+
+I use the data in `training` both for model training and model cross-validation purposes, so `training` is divided into a `trainingSet` that contains 75% of the observations and a `cvSet` that contains the remaining 25%. Furthermore, I include in these sets only the variables with available measurements from the accelerometers, gyros and magnetometers (52 features + output class).
+
+````{r, echo=TRUE, results='hide',message=FALSE, warning=FALSE}
+varInterest <- c(8:11, 37:49, 60:68, 84:86, 102, 113:124, 140, 151:160)
+training <- training[, varInterest]; testing <- testing[, varInterest]
+library(caret); inTrain = createDataPartition(training$class, p = 3/4)[[1]] 
+trainingSet <- training[inTrain,]; cvSet <- training[-inTrain,]
+```
+
+I do a first exploratory analysis consisting in a scatter plot of the two principal components, which capture about 47% of the variance.
+
+
+````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
+library(stats); prComp <- prcomp(trainingSet[, -53])
+print(c("Captured Proportion of Variance:",sum(summary(prComp)$importance[2,1:2])))
+qplot(prComp$x[,1], prComp$x[,2], color=trainingSet$class)
+```
+
+It is clear that classes cannot be separated in this 2-dimensional plot, so my first temptative strategy is to fit several models including all the 52 features available. In particular, I try a Decision Tree, a Random Forest, LDA and SVM models. In all the models, I check the prediction accuracy achieved with the data in the training set (used to train the different models) and the data in the cross-validation set (not involved in model training). All models are computed in reasonble time except for the Random Forest with deafult parameters (not reproduced here). In this case I used PCA to reduce the number of features (variance threshold was fixed to 0.8) and so improve execution time. In that case, both training set and cross-validation set accuracies were around 75%. The results of the other models are shown next. 
+
+######Decision Tree
+
+````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
+library(caret); set.seed(234); modFit1 <- train(classe ~ ., method="rpart",data=trainingSet)
+cvPred1 <- predict(modFit1, newdata=cvSet)
+trainPred1 <- predict(modFit1, newdata=trainingSet)
+print(c("Decision Tree: Training Accuracy",sum(trainPred1==trainingSet$class)/length(trainPred1)))
+print(c("Decision Tree: CV Accuracy",sum(cvPred1==cvSet$class)/length(cvPred1)))
+`````
+
+######LDA
+
+````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
+library(caret); set.seed(234); modFit2 <- train(classe ~ ., method="lda", data=trainingSet)
+cvPred2 <- predict(modFit2, newdata=cvSet)
+trainPred2 <- predict(modFit2, newdata=trainingSet)
+print(c("LDA: Training Accuracy",sum(trainPred2==trainingSet$class)/length(trainPred2)))
+print(c("LDA: CV Accuracy",sum(cvPred2==cvSet$class)/length(cvPred2)))
+````
+
+######SVM
+````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
+library(e1071); set.seed(234); modFit3 <- svm(classe ~ ., method="svm", data=trainingSet)
+cvPred3 <- predict(modFit3, newdata=cvSet)
+trainPred3 <- predict(modFit3, newdata=trainingSet)
+print(c("SVM: Training Accuracy",sum(trainPred3==trainingSet$class)/length(trainPred3)))
+print(c("SVM: CV Accuracy",sum(cvPred3==cvSet$class)/length(cvPred3)))
+```
+
+At the light of the results, the SVM model performs quite good (fairly better than other methods and not far from the ideal 100% accuracy). Training and cross-validation performances are pretty similar, so there is no strong evidence of model overfitting. However, it is necessary to check if the model is able to predict all output classes or may have problems in some of them. The confusion matrix for the SVM model in the cross-validation set is:
+
+````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
+library(caret); print(confusionMatrix(cvPred3,cvSet$class))
+```
+
+Note that sensitivity and specificity values for all classes are almost all above 0.9 and that all output classes are well represented. Although it is possible to further improve the prediction by the adjustment of the model and its combination with other predictors, I consider that the default SVM model is good enough for this application.
+
+Finally, I predict the classes corresponding to the 20 observations in the given `testing` data frame.
+
+````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
+print(predTest3 <- predict(modFit3,newdata = testing))
+```
+
