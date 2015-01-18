@@ -59,7 +59,7 @@ print(c("LDA: CV Accuracy",sum(cvPred2==cvSet$class)/length(cvPred2)))
 
 ######SVM
 ````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
-library(e1071); set.seed(234); modFit3 <- svm(classe ~ ., method="svm", data=trainingSet)
+library(e1071); library(caret); set.seed(234); modFit3 <- svm(classe ~ ., method="svm", data=trainingSet)
 cvPred3 <- predict(modFit3, newdata=cvSet)
 trainPred3 <- predict(modFit3, newdata=trainingSet)
 print(c("SVM: Training Accuracy",sum(trainPred3==trainingSet$class)/length(trainPred3)))
@@ -73,10 +73,3 @@ library(caret); print(confusionMatrix(cvPred3,cvSet$class))
 ```
 
 Note that sensitivity and specificity values for all classes are almost all above 0.9 and that all output classes are well represented. Although it is possible to further improve the prediction by the adjustment of the model and its combination with other predictors, I consider that the default SVM model is good enough for this application.
-
-Finally, I predict the classes corresponding to the 20 observations in the given `testing` data frame.
-
-````{r, echo=TRUE, results='show',message=FALSE, warning=FALSE}
-print(predTest3 <- predict(modFit3,newdata = testing))
-```
-
